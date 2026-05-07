@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Jordan Elite Magic Tracker</title>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+    <style>
+        body { margin: 0; background: #050505; color: #00ffff; font-family: 'Segoe UI', sans-serif; overflow: hidden; }
+        
+        /* Roblox-style Mod Menu */
+        #menu {
+            position: fixed; top: 10px; left: 50%; transform: translateX(-50%);
+            background: rgba(20, 20, 20, 0.9); border: 2px solid #00ffff;
+            padding: 15px; border-radius: 10px; z-index: 100; text-align: center;
+            box-shadow: 0 0 15px #00ffff; min-width: 300px;
+        }
+
+        .instruction { color: #fff; font-weight: bold; margin-bottom: 10px; text-transform: uppercase; font-size: 0.9em; }
+        
+        select {
+            background: #000; color: #00ffff; border: 1px solid #00ffff;
+            padding: 5px; border-radius: 5px; cursor: pointer; width: 100%;
+        }
+
+        #webcam { transform: rotateY(180deg); position: fixed; width: 100vw; height: 100vh; object-fit: cover; opacity: 0.4; }
+        #canvas { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; pointer-events: none; }
+    </style>
+</head>
+<body>
+
+    <div id="menu">
+        <div class="instruction" id="hint">Select a Magic and follow the motion</div>
+        <select id="magicSelect">
+            <option value="fire">FIRE (Action: Make a FIST)</option>
+            <option value="electric">ELECTRIC (Action: PINCH Fingers)</option>
+            <option value="void">VOID (Action: FLAT PALM)</option>
+        </select>
+    </div>
+
+    <video id="webcam"></video>
+    <canvas id="canvas"></canvas>
+
+    <script>
+        const video = document.getElementById('webcam');
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const magicSelect = document.getElementById('magicSelect');
+        const hint = document.getElementById('hint');
+
+        let particles = [];
+
+        function onResults(results) {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            if (results.multiHandLandmarks) {
+                for (const landmarks of results.multiHandLandmarks) {
+                    const selectedMagic = magicSelect.value;
+                    const handX = (1 - landmarks[0].x) * canvas.width;
+                    const handY = landmarks[0].y * canvas.height;
+
+                    // Gesture Math
+                    const isFist = checkFist(landmarks);
+                    const isPinch = checkPinch(landmarks);
+                    const isFlat = checkFlat(landmarks);
+
+                    if (selectedMagic === 'fire' && isFist) {
+                        spawnEffect(handX, handY, '#ff4400');
+                        hint.innerText = "🔥 FIRE ACTIVATED!";
+                    } else if (selectedMagic === 'electric' && isPinch) {
+                        spawnEffect(handX, handY, '#00bbff');
+                        hint.innerText = "⚡ ELECTRIC CHARGED!";
+                    } else if (selectedMagic === 'void' && isFlat) {
+                        spawnEffect(handX, handY, '#aa00ff');
+                        hint.innerText = "🔮 VOID SUMMONED!";
+                    } else {
+                        hint.innerText = `DO THE ${selectedMagic.toUpperCase()} MOTION`;
+                    }
+                }
+            }
+            updateParticles();
+        }
+
+        // Gesture Logic Functions
+        function checkFist(lm) {
+            // Check if finger tips (8, 12, 16, 20) are below their middle joints
+            return lm[8].y > lm[6].y && lm[12].y > lm[10].y && lm[16].y > lm[14].y;
+        }
+
+        function checkPinch(lm) {
+            const dist = Math.hypot(lm[4].x - lm[8].x, lm[4].y - lm[8].y);
+            return dist < 0.05;
+        }
+
+        function checkFlat(lm) {
+            return lm[8].y < lm[6].y && lm[12].y < lm[10].y && lm[4].y < lm[2].y;
+        }
+
+        function spawnEffect(x, y, color) {
+            for(let i=0; i<8; i++) {
+                particles.push({
+                    x, y, vx: (Math.random()-0.5)*15, vy: (Math.random()-0.5)*15,
+                    life: 1.0, color
+                });
+            }
+        }
+
+        function updateParticles() {
+            particles.forEach((p, i) => {
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, 8 * p.life, 0, Math.PI*2);
+                ctx.fillStyle = p.color;
+                ctx.shadowBlur = 15; ctx.shadowColor = p.color;
+                ctx.fill();
+                p.x += p.vx; p.y += p.vy; p.life -= 0.03;
+                if(p.life <= 0) particles.splice(i, 1);
+            });
+        }
+
+        // Initialize MediaPipe
+        const hands = new Hands({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`});
+        hands.setOptions({ maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.7, minTrackingConfidence: 0.7 });
+        hands.onResults(onResults);
+
+        const camera = new Camera(video, {
+            onFrame: async () => { await hands.send({image: video}); },
+            width: 1280, height: 720
+        });
+        camera.start();
+    </script>
+</body>
+</html>
