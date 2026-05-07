@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JORDAN ELITE | DUAL HAND TRACKER</title>
+    
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+
+    <style>
+        body { margin: 0; background: #000; overflow: hidden; font-family: 'Segoe UI', sans-serif; color: #00ffff; }
+        #webcam { transform: rotateY(180deg); position: fixed; width: 100vw; height: 100vh; object-fit: cover; z-index: 1; }
+        #canvas { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; pointer-events: none; z-index: 2; }
+        
+        /* Mod Menu Style */
+        #menu {
+            position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
+            background: rgba(10, 10, 10, 0.9); border: 2px solid #00ffff;
+            padding: 15px; border-radius: 12px; z-index: 100; text-align: center;
+            box-shadow: 0 0 20px #00ffff; width: 320px;
+        }
+
+        select {
+            background: #111; color: #fff; border: 1px solid #00ffff;
+            padding: 10px; border-radius: 6px; width: 100%; cursor: pointer; outline: none;
+        }
+
+        /* Backup/Loading UI */
+        #status-box {
+            position: fixed; bottom: 20px; right: 20px; background: rgba(0,0,0,0.8);
+            padding: 10px; font-size: 12px; border-left: 3px solid #ff0000; z-index: 100;
+        }
+        
+        #loading-screen {
+            position: fixed; inset: 0; background: #000; z-index: 999;
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+        }
+
+        .btn-retry {
+            margin-top: 20px; padding: 10px 20px; background: #00ffff; color: #000;
+            border: none; border-radius: 5px; cursor: pointer; font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="loading-screen">
+        <h1>JORDAN ELITE</h1>
+        <p id="load-msg">CONNECTING TO AI ENGINES...</p>
+        <button class="btn-retry" onclick="location.reload()">RELOAD SYSTEM</button>
+    </div>
+
+    <div id="status-box">SYSTEM: <span id="sys-stat">WAITING</span></div>
+
+    <div id="menu">
+        <div style="margin-bottom: 10px; font-weight: bold; letter-spacing: 1px;">ELITE MAGIC MENU</div>
+        <select id="magicSelect">
+            <option value="fire">FIRE (Action: Fist)</option>
+            <option value="electric">ELECTRIC (Action: Pinch)</option>
+            <option value="ice">ICE (Action: Middle Pinch)</option>
+            <option value="void">VOID (Action: Flat Palm)</option>
+        </select>
+    </div>
+
+    <video id="webcam" autoplay playsinline></video>
+    <canvas id="canvas"></canvas>
+
+    <script>
+        const video = document.getElementById('webcam');
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const magicSelect = document.getElementById('magicSelect');
+        const sysStat = document.getElementById('sys-stat');
+        const loadScreen = document.getElementById('loading-screen');
+
+        let particles = [];
+
+        // --- BACKUP: Error Handling for Libraries ---
+        window.onerror = function(msg) {
+            sysStat.innerText = "CRITICAL ERROR";
+            sysStat.style.color = "red";
+            console.error(msg);
+        };
+
+        function onResults(results) {
+            // Hide loading screen once first frame is tracked
+            if(loadScreen) loadScreen.style.display = "none";
+            
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+                sysStat.innerText = "TRACKING ACTIVE";
+                sysStat.style.color = "#00ff00";
+
+                results.multiHandLandmarks.forEach((landmarks) => {
+                    // DRAW SKELETON
+                    drawConnectors(ctx, landmarks, HAND_CONNECTIONS, {color: '#00ffff', lineWidth: 4});
+                    drawLandmarks(ctx, landmarks, {color: '#ff0000', lineWidth: 1, radius: 3});
+
+                    const magic = magicSelect.value;
+                    const x = (1 - landmarks[0].x) * canvas.width;
+                    const y = landmarks[0].y * canvas.height;
+
+                    // Gesture Logic
+                    if (magic === 'fire' && checkFist(landmarks)) spawn(x, y, '#ff4500');
+                    if (magic === 'electric' && checkPinch(landmarks, 8)) spawn(x, y, '#00dfff');
+                    if (magic === 'ice' && checkPinch(landmarks, 12)) spawn(x, y, '#ffffff');
+                    if (magic === 'void' && checkFlat(landmarks)) spawn(x, y, '#8a2be2');
+                });
+            } else {
+                sysStat.innerText = "SEARCHING...";
+                sysStat.style.color = "yellow";
+            }
+            updateParticles();
+        }
+
+        // Gesture Math
+        function checkFist(lm) { return lm[8].y > lm[6].y && lm[12].y > lm[10].y; }
+        function checkFlat(lm) { return lm[8].y < lm[6].y && lm[12].y < lm[10].y; }
+        function checkPinch(lm, idx) { return Math.hypot(lm[4].x - lm[idx].x, lm[4].y - lm[idx].y) < 0.05; }
+
+        function spawn(x, y, color) {
+            for(let i=0; i<6; i++) {
+                particles.push({
+                    x, y, color,
+                    vx: (Math.random()-0.5)*20,
+                    vy: (Math.random()-0.5)*20,
+                    life: 1.0
+                });
+            }
+        }
+
+        function updateParticles() {
+            particles.forEach((p, i) => {
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, 10 * p.life, 0, Math.PI*2);
+                ctx.fillStyle = p.color;
+                ctx.shadowBlur = 20; ctx.shadowColor = p.color;
+                ctx.fill();
+                p.x += p.vx; p.y += p.vy; p.life -= 0.04;
+                if(p.life <= 0) particles.splice(i, 1);
+            });
+        }
+
+        // --- BACKUP: Model Loading with Retry ---
+        const hands = new Hands({
+            locateFile: (file) => {
+                sysStat.innerText = "LOADING MODELS...";
+                return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
+            }
+        });
+
+        hands.setOptions({ 
+            maxNumHands: 2, 
+            modelComplexity: 1, 
+            minDetectionConfidence: 0.7, 
+            minTrackingConfidence: 0.7 
+        });
+        
+        hands.onResults(onResults);
+
+        // START CAMERA
+        const camera = new Camera(video, {
+            onFrame: async () => { await hands.send({image: video}); },
+            width: 1280, height: 720
+        });
+
+        camera.start().catch(err => {
+            document.getElementById('load-msg').innerText = "CAMERA BLOCKED! Please allow camera access.";
+            sysStat.innerText = "CAMERA ERROR";
+        });
+    </script>
+</body>
+</html>
