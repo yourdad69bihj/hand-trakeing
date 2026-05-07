@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>JORDAN ELITE | PCVR BRIDGE</title>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/holistic/holistic.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+    <style>
+        body { margin: 0; background: #000; color: #00ffff; font-family: monospace; text-align: center; }
+        #webcam { width: 100%; height: auto; transform: rotateY(180deg); opacity: 0.5; }
+        .config { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.8); padding: 20px; border: 2px solid #00ffff; border-radius: 10px; z-index: 100; }
+        input { background: #111; color: #00ffff; border: 1px solid #00ffff; padding: 5px; margin: 5px; }
+    </style>
+</head>
+<body>
+
+    <div class="config">
+        <b>PCVR BRIDGE CONFIG</b><br>
+        PC IP: <input type="text" id="pcIp" placeholder="192.168.1.X"><br>
+        <button id="connectBtn" style="background:#00ffff; color:#000; border:none; padding:10px; width:100%; cursor:pointer;">START TRANSMISSION</button>
+    </div>
+
+    <video id="webcam" autoplay playsinline></video>
+
+    <script>
+        const video = document.getElementById('webcam');
+        const pcIp = document.getElementById('pcIp');
+        const connectBtn = document.getElementById('connectBtn');
+        let socket;
+
+        connectBtn.onclick = () => {
+            // Connect to a local websocket server on your PC
+            socket = new WebSocket(`ws://${pcIp.value}:8080`);
+            socket.onopen = () => alert("Linked to PC VR Bridge");
+        };
+
+        function onResults(results) {
+            if (socket && socket.readyState === WebSocket.OPEN && results.poseLandmarks) {
+                // Send only the essential PCVR trackers: Feet, Hips, Chest
+                const data = {
+                    hips: results.poseLandmarks[0],
+                    leftFoot: results.poseLandmarks[28],
+                    rightFoot: results.poseLandmarks[27],
+                    chest: results.poseLandmarks[12]
+                };
+                socket.send(JSON.stringify(data));
+            }
+        }
+
+        const holistic = new Holistic({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/holistic/${file}`});
+        holistic.setOptions({ modelComplexity: 1, smoothLandmarks: true, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
+        holistic.onResults(onResults);
+
+        const camera = new Camera(video, {
+            onFrame: async () => { await holistic.send({image: video}); },
+            width: 640, height: 480 // Lower res = Faster tracking for VR
+        });
+        camera.start();
+    </script>
+</body>
+</html>
