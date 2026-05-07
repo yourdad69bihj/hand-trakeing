@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Jordan Elite | Ultimate Magic Tracker</title>
+    <title>Jordan Elite | Skeleton Tracker</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
@@ -11,28 +11,26 @@
         
         #menu {
             position: fixed; top: 15px; left: 50%; transform: translateX(-50%);
-            background: rgba(10, 10, 10, 0.95); border: 2px solid #00ffff;
-            padding: 20px; border-radius: 12px; z-index: 100; text-align: center;
-            box-shadow: 0 0 20px rgba(0, 255, 255, 0.5); width: 350px;
+            background: rgba(10, 10, 10, 0.9); border: 2px solid #00ffff;
+            padding: 15px; border-radius: 10px; z-index: 100; text-align: center;
+            box-shadow: 0 0 20px #00ffff; width: 320px;
         }
 
-        .status-bar { font-size: 0.8em; margin-top: 10px; color: #555; }
-        .active-magic { color: #fff; font-size: 1.2em; text-shadow: 0 0 10px #00ffff; }
+        .active-magic { color: #fff; font-size: 1.1em; text-transform: uppercase; margin-bottom: 8px; }
         
         select {
-            background: #111; color: #00ffff; border: 1px solid #00ffff;
-            padding: 10px; border-radius: 5px; width: 100%; margin-top: 10px;
-            font-family: 'Courier New', monospace;
+            background: #000; color: #00ffff; border: 1px solid #00ffff;
+            padding: 8px; border-radius: 5px; width: 100%; cursor: pointer;
         }
 
-        #webcam { transform: rotateY(180deg); position: fixed; width: 100vw; height: 100vh; object-fit: cover; opacity: 0.2; }
+        #webcam { transform: rotateY(180deg); position: fixed; width: 100vw; height: 100vh; object-fit: cover; opacity: 0.3; }
         #canvas { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; pointer-events: none; }
     </style>
 </head>
 <body>
 
     <div id="menu">
-        <div class="active-magic" id="hint">SYSTEM READY</div>
+        <div class="active-magic" id="hint">System Initializing...</div>
         <select id="magicSelect">
             <option value="fire">FIRE (Fist)</option>
             <option value="electric">ELECTRIC (Pinch Index)</option>
@@ -40,7 +38,6 @@
             <option value="earth">EARTH (Pinch Pinky)</option>
             <option value="void">VOID (Flat Palm)</option>
         </select>
-        <div class="status-bar">Tracking: <span id="track-stat">Searching...</span></div>
     </div>
 
     <video id="webcam"></video>
@@ -52,74 +49,81 @@
         const ctx = canvas.getContext('2d');
         const magicSelect = document.getElementById('magicSelect');
         const hint = document.getElementById('hint');
-        const trackStat = document.getElementById('track-stat');
 
         let particles = [];
 
         function onResults(results) {
             canvas.width = window.innerWidth;
             canvas.height = window.innerHeight;
-            ctx.save();
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
             if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
-                trackStat.innerText = "LOCKED";
-                trackStat.style.color = "#00ff00";
-
                 for (const landmarks of results.multiHandLandmarks) {
-                    // --- DRAW THE TRACKING LINES (The Skeleton) ---
-                    drawConnectors(ctx, landmarks, HAND_CONNECTIONS, {color: '#00ffff', lineWidth: 2});
-                    drawLandmarks(ctx, landmarks, {color: '#ff0000', lineWidth: 1, radius: 3});
+                    
+                    // --- THE SKELETON HAND ---
+                    // This draws the "bones" (connections between points)
+                    drawConnectors(ctx, landmarks, HAND_CONNECTIONS, {
+                        color: '#00ffff', // Cyan bones
+                        lineWidth: 4
+                    });
+                    
+                    // This draws the "joints" (the 21 points)
+                    drawLandmarks(ctx, landmarks, {
+                        color: '#ff0000', // Red joints
+                        lineWidth: 1,
+                        radius: 4
+                    });
 
-                    const selectedMagic = magicSelect.value;
-                    const palmX = (1 - landmarks[0].x) * canvas.width;
-                    const palmY = landmarks[0].y * canvas.height;
+                    // --- MAGIC EFFECTS ---
+                    const magic = magicSelect.value;
+                    const palm = landmarks[0]; // Wrist/Palm point
+                    const x = (1 - palm.x) * canvas.width;
+                    const y = palm.y * canvas.height;
 
-                    // Gesture Checks
-                    if (selectedMagic === 'fire' && checkFist(landmarks)) {
-                        spawn(palmX, palmY, '#ff4400', 15);
-                        hint.innerText = "🔥 INFERNO";
+                    if (magic === 'fire' && checkFist(landmarks)) {
+                        spawnEffect(x, y, '#ff4500', 10);
+                        hint.innerText = "🔥 INFERNO ACTIVE";
                     } 
-                    else if (selectedMagic === 'electric' && checkPinch(landmarks, 8)) {
-                        spawn(palmX, palmY, '#00bbff', 10);
-                        hint.innerText = "⚡ BOLT";
+                    else if (magic === 'electric' && checkPinch(landmarks, 8)) {
+                        spawnEffect(x, y, '#00dfff', 5);
+                        hint.innerText = "⚡ VOLTAGE ACTIVE";
                     }
-                    else if (selectedMagic === 'ice' && checkPinch(landmarks, 12)) {
-                        spawn(palmX, palmY, '#ffffff', 8);
-                        hint.innerText = "❄️ FROST";
+                    else if (magic === 'ice' && checkPinch(landmarks, 12)) {
+                        spawnEffect(x, y, '#ffffff', 8);
+                        hint.innerText = "❄️ FROST ACTIVE";
                     }
-                    else if (selectedMagic === 'earth' && checkPinch(landmarks, 20)) {
-                        spawn(palmX, palmY, '#8b4513', 20);
-                        hint.innerText = "⛰️ QUAKE";
+                    else if (magic === 'earth' && checkPinch(landmarks, 20)) {
+                        spawnEffect(x, y, '#8b4513', 15);
+                        hint.innerText = "⛰️ TERRA ACTIVE";
                     }
-                    else if (selectedMagic === 'void' && checkFlat(landmarks)) {
-                        spawn(palmX, palmY, '#aa00ff', 5);
-                        hint.innerText = "🔮 ABYSS";
+                    else if (magic === 'void' && checkFlat(landmarks)) {
+                        spawnEffect(x, y, '#8a2be2', 12);
+                        hint.innerText = "🔮 VOID ACTIVE";
                     } else {
-                        hint.innerText = "AWAITING GESTURE...";
+                        hint.innerText = "WAITING FOR GESTURE...";
                     }
                 }
             } else {
-                trackStat.innerText = "SEARCHING...";
-                trackStat.style.color = "#ff0000";
+                hint.innerText = "HAND NOT DETECTED";
             }
-            ctx.restore();
             updateParticles();
         }
 
-        // Gesture Math
+        // Gesture Detection Logic
         function checkFist(lm) { return lm[8].y > lm[6].y && lm[12].y > lm[10].y && lm[16].y > lm[14].y; }
         function checkFlat(lm) { return lm[8].y < lm[6].y && lm[12].y < lm[10].y && lm[20].y < lm[18].y; }
-        function checkPinch(lm, fingerIdx) {
-            const d = Math.hypot(lm[4].x - lm[fingerIdx].x, lm[4].y - lm[fingerIdx].y);
-            return d < 0.04;
+        function checkPinch(lm, idx) {
+            const d = Math.hypot(lm[4].x - lm[idx].x, lm[4].y - lm[idx].y);
+            return d < 0.04; // Sensitivity for touching fingers
         }
 
-        function spawn(x, y, color, size) {
-            for(let i=0; i<5; i++) {
+        function spawnEffect(x, y, color, speed) {
+            for(let i=0; i<6; i++) {
                 particles.push({
-                    x, y, vx: (Math.random()-0.5)*20, vy: (Math.random()-0.5)*20,
-                    life: 1.0, color, size
+                    x, y, color, 
+                    vx: (Math.random()-0.5)*speed, 
+                    vy: (Math.random()-0.5)*speed,
+                    life: 1.0
                 });
             }
         }
@@ -127,10 +131,11 @@
         function updateParticles() {
             particles.forEach((p, i) => {
                 ctx.beginPath();
-                ctx.arc(p.x, p.y, p.size * p.life, 0, Math.PI*2);
+                ctx.arc(p.x, p.y, 6 * p.life, 0, Math.PI*2);
                 ctx.fillStyle = p.color;
+                ctx.shadowBlur = 10; ctx.shadowColor = p.color;
                 ctx.fill();
-                p.x += p.vx; p.y += p.vy; p.life -= 0.04;
+                p.x += p.vx; p.y += p.vy; p.life -= 0.03;
                 if(p.life <= 0) particles.splice(i, 1);
             });
         }
