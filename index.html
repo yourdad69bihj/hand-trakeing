@@ -2,60 +2,66 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Jordan Elite | Dual Hand Tracker</title>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jordan Elite | Magic Hand Tracker</title>
+    
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+
     <style>
-        body { margin: 0; background: #000; overflow: hidden; font-family: 'Segoe UI', sans-serif; }
+        body { margin: 0; background: #000; overflow: hidden; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
         
-        /* The Mod Menu */
         #menu {
             position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
-            background: rgba(0, 0, 0, 0.85); border: 2px solid #00ffff;
+            background: rgba(10, 10, 10, 0.9); border: 2px solid #00ffff;
             padding: 15px; border-radius: 12px; z-index: 100; text-align: center;
-            box-shadow: 0 0 15px #00ffff; width: 300px; color: #00ffff;
+            box-shadow: 0 0 20px #00ffff; width: 300px;
         }
 
+        .label { color: #00ffff; text-transform: uppercase; font-size: 0.8em; letter-spacing: 2px; margin-bottom: 10px; }
+        
         select {
-            background: #111; color: #00ffff; border: 1px solid #00ffff;
-            padding: 8px; border-radius: 5px; width: 100%; margin-top: 10px;
+            background: #111; color: #fff; border: 1px solid #00ffff;
+            padding: 10px; border-radius: 6px; width: 100%; cursor: pointer; outline: none;
         }
 
-        /* Full opacity webcam */
         #webcam { 
-            transform: rotateY(180deg); 
-            position: fixed; 
-            width: 100vw; 
-            height: 100vh; 
-            object-fit: cover; 
+            transform: rotateY(180deg); position: fixed; 
+            width: 100vw; height: 100vh; object-fit: cover; 
         }
 
-        /* Overlay for the skeleton and magic */
         #canvas { 
-            position: fixed; 
-            top: 0; 
-            left: 0; 
-            width: 100vw; 
-            height: 100vh; 
-            pointer-events: none; 
-            z-index: 10;
+            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; 
+            pointer-events: none; z-index: 10;
+        }
+
+        .loading-screen {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: #000; display: flex; flex-direction: column;
+            justify-content: center; align-items: center; z-index: 1000;
+            color: #00ffff; transition: opacity 0.5s;
         }
     </style>
 </head>
 <body>
 
+    <div class="loading-screen" id="loader">
+        <h1>JORDAN ELITE</h1>
+        <p>INITIALIZING AI TRACKING...</p>
+    </div>
+
     <div id="menu">
-        <div id="hint" style="text-transform: uppercase; font-weight: bold;">Dual Tracking Active</div>
+        <div class="label">Magic Selection</div>
         <select id="magicSelect">
-            <option value="fire">FIRE (Fist)</option>
-            <option value="electric">ELECTRIC (Pinch Index)</option>
-            <option value="ice">ICE (Pinch Middle)</option>
-            <option value="void">VOID (Flat Palm)</option>
+            <option value="fire">FIRE (Action: Fist)</option>
+            <option value="electric">ELECTRIC (Action: Pinch)</option>
+            <option value="ice">ICE (Action: Middle Pinch)</option>
+            <option value="void">VOID (Action: Flat Palm)</option>
         </select>
     </div>
 
-    <video id="webcam"></video>
+    <video id="webcam" autoplay playsinline></video>
     <canvas id="canvas"></canvas>
 
     <script>
@@ -63,35 +69,31 @@
         const canvas = document.getElementById('canvas');
         const ctx = canvas.getContext('2d');
         const magicSelect = document.getElementById('magicSelect');
-        const hint = document.getElementById('hint');
+        const loader = document.getElementById('loader');
 
         let particles = [];
 
         function onResults(results) {
+            // Remove loader once tracking starts
+            if (loader.style.opacity !== "0") loader.style.opacity = "0";
+            setTimeout(() => loader.style.display = "none", 500);
+
             canvas.width = window.innerWidth;
             canvas.height = window.innerHeight;
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
             if (results.multiHandLandmarks) {
-                // MediaPipe handles the 2-hand logic here
-                results.multiHandLandmarks.forEach((landmarks, index) => {
+                results.multiHandLandmarks.forEach((landmarks) => {
                     
-                    // 1. DRAW SKELETON (Cyan Bones, Red Joints)
-                    drawConnectors(ctx, landmarks, HAND_CONNECTIONS, {
-                        color: '#00ffff',
-                        lineWidth: 5
-                    });
-                    drawLandmarks(ctx, landmarks, {
-                        color: '#ff0000',
-                        lineWidth: 1,
-                        radius: 4
-                    });
+                    // 1. DRAW THE SKELETON HAND
+                    drawConnectors(ctx, landmarks, HAND_CONNECTIONS, {color: '#00ffff', lineWidth: 4});
+                    drawLandmarks(ctx, landmarks, {color: '#ff0000', lineWidth: 1, radius: 3});
 
-                    // 2. DETECT MAGIC
+                    // 2. GESTURE & POSITION LOGIC
                     const magic = magicSelect.value;
-                    const wrist = landmarks[0]; 
-                    const x = (1 - wrist.x) * canvas.width;
-                    const y = wrist.y * canvas.height;
+                    // Coordinate conversion (mirroring the video)
+                    const x = (1 - landmarks[0].x) * canvas.width;
+                    const y = landmarks[0].y * canvas.height;
 
                     if (magic === 'fire' && checkFist(landmarks)) {
                         spawn(x, y, '#ff4500');
@@ -107,15 +109,14 @@
             updateParticles();
         }
 
-        // Gesture Detection
         function checkFist(lm) { return lm[8].y > lm[6].y && lm[12].y > lm[10].y; }
         function checkFlat(lm) { return lm[8].y < lm[6].y && lm[12].y < lm[10].y; }
         function checkPinch(lm, idx) {
-            return Math.hypot(lm[4].x - lm[idx].x, lm[4].y - lm[idx].y) < 0.04;
+            return Math.hypot(lm[4].x - lm[idx].x, lm[4].y - lm[idx].y) < 0.05;
         }
 
         function spawn(x, y, color) {
-            for(let i=0; i<5; i++) {
+            for(let i=0; i<6; i++) {
                 particles.push({
                     x, y, color,
                     vx: (Math.random()-0.5)*15,
@@ -137,13 +138,12 @@
             });
         }
 
-        // SETTINGS FOR 2 HANDS
         const hands = new Hands({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`});
         hands.setOptions({ 
-            maxNumHands: 2, // Changed to 2 hands
+            maxNumHands: 2, 
             modelComplexity: 1, 
-            minDetectionConfidence: 0.7, 
-            minTrackingConfidence: 0.7 
+            minDetectionConfidence: 0.75, 
+            minTrackingConfidence: 0.75 
         });
         hands.onResults(onResults);
 
